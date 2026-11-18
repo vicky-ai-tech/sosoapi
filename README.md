@@ -1,46 +1,36 @@
-# Post to Threads with your coding agent
+# Post to social media with your coding agent
 
-**[Try it with your agent →](https://sosoapi.ai/try/threads)**
+Install one skill to post to Threads, Facebook Pages, Instagram, X and YouTube. Give your agent the accounts, caption and any media, then ask for the links. You can name several destinations in one request.
 
-Give Codex or Claude Code a post or an idea. Your agent keeps your finished wording or drafts from your idea, then shows you the text and Threads account. Once you approve, it publishes through SosoAPI and follows the result until Threads confirms.
+## Install
 
-The demo opens your text in Codex. For Claude Code or an existing Codex chat, copy the prompt from the same page.
+From your project with Node.js 22.20 or newer, run the command for your agent. Restart its session to pick up the skill.
+
+| Agent | Project install |
+| --- | --- |
+| Codex | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a codex` |
+| Claude Code | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a claude-code` |
+
+## Choose how to post
+
+**1. Use my browser.** Start with your native social account in Google Chrome. You can use this route without signing up for SosoAPI. On first use the skill installs its pinned browser driver automatically. Your agent can open a dedicated Chrome profile for native sign-in and 2FA. You can also use a local Chrome debugging session you control.
+
+**2. Use the SosoAPI CLI.** Register or sign in to SosoAPI and connect the accounts in your workspace once. The agent sends your request through the official API and gets a compact result. The original live Threads benchmark used 75.7% fewer total model tokens than manually driving the browser; the newer browser skill has its own measured comparison. [Benchmarks](#benchmark) · [SosoAPI Quick Start](https://sosoapi.ai/docs/quickstart)
+
+The skill remembers your first choice. Say “use the browser” or “use SosoAPI” to override it for one new post, or ask the agent to change your default. A pending post stays on the route that submitted it.
 
 <a id="try-it-with-your-own-release"></a>
+<a id="post-directly-from-a-browser"></a>
 
 ## Try it with your own post
 
-Paste this into your coding agent and add your text:
+> Use my browser to post “Give me a rabbit hole worth losing 15 minutes to.” on Threads as @myhandle. Send me the link.
 
-```text
-Use SosoAPI to publish one Threads post. Keep my finished wording, or draft a post from my idea.
-Show me the exact text and intended Threads account for approval.
-Once I approve, publish it once and return the confirmed Threads link if available.
-Reuse my existing connection. If I need setup, follow
-https://github.com/vicky-ai-tech/sosoapi/blob/main/AGENTS.md.
+> Use SosoAPI to post this photo and caption to @mythreads on Threads, @myinstagram on Instagram and my Facebook Page with the connected handle @mypage. Show me the preview first.
 
-My post or idea:
-<paste your text here>
-```
+Use your own accounts and supply the photo for the second example. Your agent checks every destination before submitting. If one is still pending, it can check that post while keeping the successful results. For YouTube, give the MP4, channel, exact title, visibility and audience. The browser route uses the channel ID from your YouTube Studio URL. The API route accepts the connected handle or SosoAPI account ID.
 
-[See an example of the writing step](examples/try-a-draft.md) · [Read the publishing benchmark](#benchmark).
-
-## Post directly from a browser
-
-Install **meta-browser-post** to give your agent a short local command for a Facebook Page, an Instagram feed photo, or a Threads post. The browser path uses your native platform login and works without a SosoAPI account. `preview` checks the destination before sending any content. `publish` submits once. `status` checks the same intent and returns the verified link when available.
-
-With Node.js 22.20+ and Google Chrome, run the command for your agent from your project. The installer uses project scope. Restart the agent session to discover the new skill.
-
-| Agent | Install the skill | Install its browser driver |
-| --- | --- | --- |
-| Codex | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a codex` | `npm ci --ignore-scripts --prefix .agents/skills/meta-browser-post` |
-| Claude Code | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a claude-code` | `npm ci --ignore-scripts --prefix .claude/skills/meta-browser-post` |
-
-Try asking: “Use meta-browser-post to preview ‘What are you building?’ on Threads as @myhandle. Show me the preview first.” For Instagram, also supply one local JPEG or PNG. Only the publish step sends your image to the native composer.
-
-The first time, the helper can open a separate Chrome profile so you can sign in on the provider's website. It reuses that profile on later runs. To use an existing Chrome debugging session you control, set `META_POST_PORT` to its loopback port in both terminals (default `9222`). Chrome needs to be open for browser operations. Local intent records and the dedicated browser profile live outside the repository under `~/.local/state/meta-browser-post`; `META_POST_STATE_HOME` overrides the parent directory. The helper outputs short JSON receipts. The agent can inspect the visible composer if the site changes. [Browser skill and command examples](skills/meta-browser-post/SKILL.md)
-
-For the official API path, the SosoAPI CLI uses your SosoAPI login and connected workspace. The token measurement below is for its original matched Threads run. [Benchmark](#benchmark)
+[Open the Threads demo](https://sosoapi.ai/try/threads) · [Try a draft](examples/try-a-draft.md) · [Skill commands](skills/meta-browser-post/SKILL.md)
 
 ## Connect Threads when you're ready
 
@@ -74,6 +64,19 @@ The help should list `posts publish` and `posts status`. After signing in, run `
 For more terminal commands, see the [SosoAPI CLI reference](https://sosoapi.ai/docs/cli-reference).
 
 ## Benchmark
+
+### Browser skill and API skill
+
+In one matched Codex development run per route, both routes returned every expected link. The browser used real Chromium against intercepted native pages. The API used the published SosoAPI CLI against a local service fixture. These runs count all session input and output tokens. Use the measured differences as observations for these tasks.
+
+| Approved task | Browser CLI | SosoAPI CLI |
+| --- | ---: | ---: |
+| One Threads text post | 85,299 tokens · 23.8 s | 85,337 tokens · 25.9 s |
+| One photo to Facebook, Instagram and Threads | 116,199 tokens · 29.6 s | 115,966 tokens · 34.1 s |
+
+Total tokens differed by at most 0.21% in these two pairs and the lower-token route varied by task. [Token breakdown and first-use handoffs](docs/benchmark.md#dual-cli-development-measurement)
+
+### Earlier live Threads benchmark
 
 On November 16, 2026, both agents used `gpt-6.1-sol` at `xhigh` to publish the same text to the same Threads account. Both started with working authorization and returned a verified Threads post link. The terminal run used `sosoapi@0.5.25`. The browser run used the native Threads composer in Chrome through a browser-control relay.
 

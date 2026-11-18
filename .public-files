@@ -6,6 +6,7 @@ LICENSE
 README.md
 docs/benchmark.md
 docs/changes/2026-11-16-initial-threads-quickstart.md
+docs/changes/2026-11-18-agent-publishing-routes.md
 docs/changes/2026-11-18-native-meta-browser-skill.md
 docs/changes/2026-11-18-threads-draft-first.md
 docs/changes/2026-11-18-try-threads-agent-demo.md
@@ -17,8 +18,16 @@ scripts/check-public.mjs
 skills/meta-browser-post/SKILL.md
 skills/meta-browser-post/package-lock.json
 skills/meta-browser-post/package.json
+skills/meta-browser-post/scripts/api-post.mjs
+skills/meta-browser-post/scripts/batch.mjs
+skills/meta-browser-post/scripts/extra-browser.mjs
 skills/meta-browser-post/scripts/intent.mjs
 skills/meta-browser-post/scripts/meta-post.mjs
 skills/meta-browser-post/scripts/native.mjs
+skills/meta-browser-post/scripts/skill-runtime.mjs
+skills/meta-browser-post/scripts/social-post.mjs
+tests/api-post.test.mjs
+tests/extra-browser.test.mjs
 tests/native-browser.test.mjs
 tests/public-files.test.mjs
+tests/social-post.test.mjs
