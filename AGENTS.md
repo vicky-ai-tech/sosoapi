@@ -2,6 +2,10 @@
 
 Use the user's current prompt and existing conversation. Run the commands yourself. Hand control back only for sign-in, provider consent or a decision the user hasn't made. Use Node.js 20+ and the public CLI at `sosoapi@0.5.25`.
 
+## Draft-only requests
+
+When the user asks for a draft, rewrite, or preview, use the supplied notes as source material and return the text for review. Do not run account discovery, start login, connect Threads, schedule, or publish. For the no-signup sample, see [Try a draft](examples/try-a-draft.md). Move on to destination resolution only when the user asks to connect or to publish; a connection request alone never authorizes a post.
+
 ## Resolve the destination
 
 1. Reuse current workspace/account IDs and capability facts if they identify the authorized destination. Otherwise run `node examples/threads-target.mjs` from this repo. Pass `--workspace NAME_OR_ID` and `--account @HANDLE` when the person specified them. A `ready` target can proceed to the approved post without reopening SosoAPI login or the Threads connection portal. No full API or MCP catalog is needed.
