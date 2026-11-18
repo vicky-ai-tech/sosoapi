@@ -4,12 +4,12 @@ Install one skill to post to Threads, Facebook Pages, Instagram, X and YouTube. 
 
 ## Install
 
-From your project with Node.js 22.20 or newer, run the command for your agent. Restart its session to pick up the skill.
+From your project with Node.js 22.20 or newer, run the command for your agent. It installs the skill in this project without interactive prompts. Restart the agent session to pick it up.
 
 | Agent | Project install |
 | --- | --- |
-| Codex | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a codex` |
-| Claude Code | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a claude-code` |
+| Codex | `npx --yes skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a codex -y` |
+| Claude Code | `npx --yes skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a claude-code -y` |
 
 ## Choose how to post
 
