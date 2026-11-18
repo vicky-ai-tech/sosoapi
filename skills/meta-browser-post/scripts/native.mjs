@@ -1,6 +1,8 @@
-import { chromium } from 'playwright-core'
+import { ensureBrowserRuntime } from './skill-runtime.mjs'
 import path from 'node:path'
 import { InputError, accountKey, normalized, platforms, readPhoto } from './intent.mjs'
+
+const nativeSites = { ...platforms, x: 'https://x.com/', youtube: 'https://studio.youtube.com/' }
 
 const createNames = {
   facebook: /^(create (a )?post|what['’]s on your mind(?:, .*)?\??|建立貼文|發佈近況)$/i,
@@ -33,6 +35,7 @@ export function port() {
   return n
 }
 export async function launchBrowser(directory, platform) {
+  const { chromium } = await ensureBrowserRuntime()
   const ctx = await chromium.launchPersistentContext(path.join(directory, 'chrome'), {
     channel: 'chrome',
     headless: false,
@@ -40,7 +43,7 @@ export async function launchBrowser(directory, platform) {
   })
   try {
     const page = ctx.pages()[0] || (await ctx.newPage())
-    await page.goto(platforms[platform], { waitUntil: 'domcontentloaded' })
+    await page.goto(nativeSites[platform], { waitUntil: 'domcontentloaded' })
     console.log(
       JSON.stringify({
         state: 'browser_open',
@@ -55,6 +58,7 @@ export async function launchBrowser(directory, platform) {
   }
 }
 export async function connectBrowser() {
+  const { chromium } = await ensureBrowserRuntime()
   try {
     return await chromium.connectOverCDP(`http://127.0.0.1:${port()}`, { timeout: 4500 })
   } catch {
@@ -67,7 +71,7 @@ export async function connectBrowser() {
 function onPlatform(url, platform) {
   try {
     const u = new URL(url),
-      root = new URL(platforms[platform]).hostname.replace(/^www\./, '')
+      root = new URL(nativeSites[platform]).hostname.replace(/^www\./, '')
     return (
       u.protocol === 'https:' &&
       [root, 'www.' + root].includes(u.hostname) &&
@@ -129,7 +133,7 @@ export async function selectTab(browser, platform, previous, openIfMissing) {
     if (visible.length === 1) page = visible[0]
   } else if (openIfMissing) {
     page = await context.newPage()
-    await page.goto(platforms[platform], { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(nativeSites[platform], { waitUntil: 'domcontentloaded', timeout: 20000 })
   }
   if (!page)
     need(

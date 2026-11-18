@@ -1,10 +1,8 @@
-# Publish one Threads text post through SosoAPI
+# Publish social posts with your agent
 
-Use the user's current prompt and existing conversation. Run the commands yourself. Hand control back only for sign-in, provider consent or a decision the user hasn't made. Use Node.js 20+ and the public CLI at `sosoapi@0.5.25`.
+Use the installed [publishing skill](skills/meta-browser-post/SKILL.md) for a browser or SosoAPI request. A single command can preview or publish to all named destinations. Use the route the user chose; the command recalls their default or asks for a first choice. The browser route uses native sign-in. The official CLI route uses the authorized SosoAPI workspace. A writing-only request stays in chat.
 
-## When the user chooses the native browser
-
-For direct posting on facebook.com, instagram.com or threads.com, use the [native browser skill](skills/meta-browser-post/SKILL.md). Keep the SosoAPI CLI path below for users who choose the official API. Preserve the requested route and the original intent after an uncertain submit.
+The sections below also document the standalone official CLI for a Threads text post. Use that path when the user chose SosoAPI and wants to work directly from this repository. Run commands for the user and hand over for sign-in, provider consent or an unresolved choice.
 
 ## Before a public push
 
