@@ -25,6 +25,23 @@ My post or idea:
 
 [See an example of the writing step](examples/try-a-draft.md) · [Read the publishing benchmark](#benchmark).
 
+## Post directly from a browser
+
+Install **meta-browser-post** to give your agent a short local command for a Facebook Page, an Instagram feed photo, or a Threads post. The browser path uses your native platform login and works without a SosoAPI account. `preview` checks the destination before sending any content. `publish` submits once. `status` checks the same intent and returns the verified link when available.
+
+With Node.js 22.20+ and Google Chrome, run the command for your agent from your project. The installer uses project scope. Restart the agent session to discover the new skill.
+
+| Agent | Install the skill | Install its browser driver |
+| --- | --- | --- |
+| Codex | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a codex` | `npm ci --ignore-scripts --prefix .agents/skills/meta-browser-post` |
+| Claude Code | `npx skills add vicky-ai-tech/sosoapi --skill meta-browser-post -a claude-code` | `npm ci --ignore-scripts --prefix .claude/skills/meta-browser-post` |
+
+Try asking: “Use meta-browser-post to preview ‘What are you building?’ on Threads as @myhandle. Show me the preview first.” For Instagram, also supply one local JPEG or PNG. Only the publish step sends your image to the native composer.
+
+The first time, the helper can open a separate Chrome profile so you can sign in on the provider's website. It reuses that profile on later runs. To use an existing Chrome debugging session you control, set `META_POST_PORT` to its loopback port in both terminals (default `9222`). Chrome needs to be open for browser operations. Local intent records and the dedicated browser profile live outside the repository under `~/.local/state/meta-browser-post`; `META_POST_STATE_HOME` overrides the parent directory. The helper outputs short JSON receipts. The agent can inspect the visible composer if the site changes. [Browser skill and command examples](skills/meta-browser-post/SKILL.md)
+
+For the official API path, the SosoAPI CLI uses your SosoAPI login and connected workspace. The token measurement below is for its original matched Threads run. [Benchmark](#benchmark)
+
 ## Connect Threads when you're ready
 
 Already happy with the text? Open the [SosoAPI Quick Start](https://sosoapi.ai/docs/quickstart) and choose your workspace and Threads account. Connecting does not publish the draft.
