@@ -2,6 +2,14 @@
 
 Use the user's current prompt and existing conversation. Run the commands yourself. Hand control back only for sign-in, provider consent or a decision the user hasn't made. Use Node.js 20+ and the public CLI at `sosoapi@0.5.25`.
 
+## When the user chooses the native browser
+
+For direct posting on facebook.com, instagram.com or threads.com, use the [native browser skill](skills/meta-browser-post/SKILL.md). Keep the SosoAPI CLI path below for users who choose the official API. Preserve the requested route and the original intent after an uncertain submit.
+
+## Before a public push
+
+Review every outgoing path and diff for confidential material. Run `node scripts/check-public.mjs origin/main` on the final index and commit range, before pushing to a fork or upstream. Keep `.public-files` limited to reviewed, distributable source, documentation, tests and package metadata. Browser profiles, authentication state, screenshots, local media and private notes belong outside Git. The tracked pre-push hook checks the actual outgoing commit, including intermediate commits. In a fresh contributor checkout, enable it with `git config --local core.hooksPath .githooks` if no other hook owner is configured. The automated check complements content review.
+
 ## Draft-only requests
 
 When the user asks for a draft, rewrite, or preview, use the supplied notes as source material and return the text for review. Do not run account discovery, start login, connect Threads, schedule, or publish. For the no-signup sample, see [Try a draft](examples/try-a-draft.md). Move on to destination resolution only when the user asks to connect or to publish; a connection request alone never authorizes a post.
