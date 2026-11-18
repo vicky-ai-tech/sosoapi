@@ -456,6 +456,147 @@ export async function confirmation(page, platform) {
   return { confirmed: true, url: href ? postURL(new URL(href, page.url()).href, platform) : null }
 }
 
+// Threads renders its timestamp as a permalink, including on layouts without an article
+// or heading. Never combine a caption with a byline or timestamp from a different card.
+async function threadsTextLinks(page, intent) {
+  const { text, account } = intent.input
+  const caption = normalized(text)
+  if (!caption || intent.input.photo) return []
+  const matches = page.getByText(caption, { exact: true })
+  await matches
+    .first()
+    .waitFor({ state: 'attached', timeout: 3500 })
+    .catch(() => {})
+  return matches.evaluateAll(
+    (elements, { actor, caption, start, profile }) => {
+      const urls = new Set()
+      const contentCard = 'article,[role="article"],[data-pressable-container="true"]'
+      const card = contentCard + ',[data-virtualized]'
+      const excluded = 'blockquote,[role="comment"],[contenteditable="true"],[role="dialog"]'
+      const stop = 'main,[role="main"],[role="region"],[role="feed"],body,html'
+      const norm = (s) =>
+        (s || '')
+          .replace(/\u00a0/g, ' ')
+          .replace(/\r\n/g, '\n')
+          .trim()
+      function postScope(element, boundary) {
+        for (
+          let node = element.parentElement;
+          node && !node.matches(stop);
+          node = node.parentElement
+        ) {
+          if (node.querySelector('time[datetime]')) return node
+          if (node === boundary) break
+        }
+        return null
+      }
+      for (const element of elements) {
+        if (
+          !element.getClientRects().length ||
+          norm(element.innerText) !== caption ||
+          element.closest(excluded + ',a,[role="link"],button,[role="button"]')
+        )
+          continue
+        const boundary = element.closest(card)
+        // On the profile, each top-level timeline item has its own card boundary.
+        if (profile && !boundary) continue
+        const outer = boundary?.parentElement?.closest(card)
+        // Signed-in timelines wrap the post's pressable card in a virtualized
+        // list item. A separate byline/timestamp outside the card signals a nested post.
+        if (
+          outer &&
+          (!outer.matches('[data-virtualized]') ||
+            outer.matches(contentCard) ||
+            outer.parentElement?.closest(card) ||
+            [...outer.querySelectorAll('time[datetime]')].some((t) => !boundary.contains(t)))
+        )
+          continue
+        if (!element.closest('[lang],[dir="auto"],article,[role="article"]')) continue
+        const scope = postScope(element, boundary)
+        const times = scope?.querySelectorAll('time[datetime]')
+        if (times?.length !== 1) continue
+        const time = times[0]
+        const link = time.closest('a[href]')
+        if (
+          !link ||
+          !time.getClientRects().length ||
+          time.closest(card) !== boundary ||
+          link.closest(excluded) ||
+          !(time.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)
+        )
+          continue
+        const url = new URL(link.href)
+        const parts = url.pathname.replace(/\/$/, '').split('/')
+        if (
+          url.origin !== location.origin ||
+          parts.length !== 4 ||
+          parts[1].toLowerCase() !== '@' + actor ||
+          parts[2] !== 'post' ||
+          !/^[\w-]+$/.test(parts[3])
+        )
+          continue
+        const stamp = Date.parse(time.dateTime)
+        if (
+          !Number.isFinite(stamp) ||
+          stamp < start - 1500 ||
+          stamp > Math.min(start + 60000, Date.now() + 1500)
+        )
+          continue
+        const author = [...scope.querySelectorAll('a[href]')].some((a) => {
+          const u = new URL(a.href)
+          return (
+            a.getClientRects().length &&
+            !a.closest(excluded) &&
+            a.closest(card) === boundary &&
+            Boolean(a.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+            u.origin === location.origin &&
+            u.pathname.replace(/\/$/, '').toLowerCase() === '/@' + actor &&
+            norm(a.innerText).replace(/^@/, '').toLowerCase() === actor
+          )
+        })
+        if (author) urls.add(url.origin + '/' + parts.slice(1).join('/'))
+      }
+      return [...urls]
+    },
+    {
+      actor: accountKey(account),
+      caption,
+      start: Date.parse(intent.submittedAt),
+      profile: !postURL(page.url(), 'threads'),
+    },
+  )
+}
+
+export async function findThreadsPermalink(context, intent) {
+  const actor = accountKey(intent.input.account)
+  if (
+    intent.input.platform !== 'threads' ||
+    !/^[a-z0-9_.]+$/.test(actor) ||
+    !normalized(intent.input.text) ||
+    intent.input.photo ||
+    !Number.isFinite(Date.parse(intent.submittedAt))
+  )
+    return null
+  const url = new URL('/@' + actor, nativeSites.threads)
+  const page = await context.newPage()
+  let links
+  try {
+    const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 10000 })
+    const landed = new URL(page.url())
+    if (
+      !response?.ok() ||
+      landed.origin !== url.origin ||
+      landed.pathname.toLowerCase().replace(/\/$/, '') !== url.pathname
+    )
+      return null
+    links = await threadsTextLinks(page, intent)
+  } finally {
+    await page.close()
+  }
+  if (links.length !== 1) return null
+  return (await verifyPost(context, intent, links[0])) ? links[0] : null
+}
+
 export async function verifyPost(context, intent, candidate, { fromReceipt = false } = {}) {
   const { platform, account, text, photo } = intent.input
   const link = postURL(candidate, platform)
@@ -469,6 +610,13 @@ export async function verifyPost(context, intent, candidate, { fromReceipt = fal
   try {
     const res = await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 15000 })
     if (!res?.ok() || postURL(page.url(), platform) !== link) return false
+    if (platform === 'threads' && text && !photo) {
+      const links = await threadsTextLinks(page, intent)
+      // A timestamp linked to another post must not fall through to the older
+      // semantic article layout, which has no permalink on its time element.
+      if (links.length || (await page.locator('a[href] time[datetime]').count()))
+        return links.length === 1 && links[0] === link.replace(/\/$/, '')
+    }
     const articles = page.locator('article,[role="article"]')
     await articles
       .first()
