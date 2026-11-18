@@ -15,6 +15,7 @@ import {
   composer,
   confirmation,
   connectBrowser,
+  findThreadsPermalink,
   launchBrowser,
   NeedsInput,
   port,
@@ -46,6 +47,11 @@ async function withBrowser(action) {
   } finally {
     await browser.close()
   }
+}
+async function recoverThreadsLink(context, intent) {
+  if (intent.input.platform !== 'threads' || !intent.submittedAt) return null
+  // A profile check is read-only. A slow or unavailable profile leaves the submission as recorded.
+  return findThreadsPermalink(context, intent).catch(() => null)
 }
 export async function run(argv) {
   const { values: v, positionals } = parseArgs({
@@ -115,21 +121,28 @@ export async function run(argv) {
       throw new InputError('Supply the observed native permalink for this platform.')
     try {
       return await withBrowser(async (b) => {
+        const context = b.contexts()[0]
+        const platform = original.input.platform
         let candidate = v.url
         if (!candidate) {
-          const { page } = await selectTab(b, original.input.platform, original.tab, false)
-          const notice = await confirmation(page, original.input.platform)
-          candidate =
-            notice?.url ||
-            (page.url() !== original.beforeURL && postURL(page.url(), original.input.platform))
+          try {
+            const { page } = await selectTab(b, platform, original.tab, false)
+            const notice = await confirmation(page, platform)
+            candidate = notice?.url || (page.url() !== original.beforeURL && postURL(page.url(), platform))
+          } catch (error) {
+            if (platform !== 'threads' || !(error instanceof NeedsInput) || error.state !== 'needs_tab')
+              throw error
+          }
         }
-        if (!candidate || !(await verifyPost(b.contexts()[0], original, candidate)))
+        let url = candidate && (await verifyPost(context, original, candidate)) && postURL(candidate, platform)
+        if (!url && !v.url) url = await recoverThreadsLink(context, original)
+        if (!url)
           return receipt(original, {
             next: 'Inspect this account’s published post. Pass its actual permalink to status if available.',
           })
-        const url = postURL(candidate, original.input.platform)
         return exclusive(dir, original.id, async () => {
           const current = await loadIntent(dir, original.id)
+          if (current.url) return receipt(current)
           current.url = url
           current.state = 'published'
           await saveIntent(dir, current)
@@ -162,39 +175,42 @@ export async function run(argv) {
           i.submittedAt = new Date().toISOString()
           i.beforeURL = page.url()
           await saveIntent(dir, i)
+          let clicked = false
           try {
             await submit.click({ timeout: 4500 })
+            clicked = true
           } catch {
-            return receipt(i, {
-              next: 'Inspect the account for this post; use status with its observed link.',
-            })
+            // The click may have reached the provider. Only look for its outcome from here.
           }
           const deadline = Date.now() + 4500
-          do {
+          while (clicked && Date.now() < deadline) {
             const confirmed = await confirmation(page, i.input.platform)
             const navigated = page.url() !== i.beforeURL && postURL(page.url(), i.input.platform)
             const candidate = confirmed?.url || navigated
-            if (confirmed || (navigated && (await verifyPost(page.context(), i, navigated)))) {
+            if (candidate && (await verifyPost(page.context(), i, candidate, { fromReceipt: Boolean(confirmed?.url) }))) {
               i.state = 'published'
-              if (
-                candidate &&
-                (await verifyPost(page.context(), i, candidate, {
-                  fromReceipt: Boolean(confirmed?.url),
-                }))
-              )
-                i.url = candidate
+              i.url = candidate
               await saveIntent(dir, i)
-              return receipt(
-                i,
-                i.url
-                  ? {}
-                  : { next: 'Use status with the observed post permalink to verify the link.' },
-              )
+              return receipt(i)
+            }
+            if (confirmed) {
+              i.state = 'published'
+              await saveIntent(dir, i)
+              break
             }
             await page.waitForTimeout(250)
-          } while (Date.now() < deadline)
+          }
+          const url = await recoverThreadsLink(page.context(), i)
+          if (url) {
+            i.state = 'published'
+            i.url = url
+            await saveIntent(dir, i)
+            return receipt(i)
+          }
           return receipt(i, {
-            next: 'Check the native outcome; pass its permalink to status. Keep the same intent.',
+            next: i.state === 'published'
+              ? 'Use status with the observed post permalink to verify the link.'
+              : 'Check the native outcome; pass its permalink to status. Keep the same intent.',
           })
         })
       })

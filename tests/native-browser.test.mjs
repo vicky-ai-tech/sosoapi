@@ -5,6 +5,7 @@ import path from 'node:path'
 import { after, before, test } from 'node:test'
 import { createRequire } from 'node:module'
 import { run } from '../skills/meta-browser-post/scripts/meta-post.mjs'
+import { runSocialPost } from '../skills/meta-browser-post/scripts/social-post.mjs'
 import { postURL } from '../skills/meta-browser-post/scripts/native.mjs'
 import { createIntent, privateDirectory } from '../skills/meta-browser-post/scripts/intent.mjs'
 
@@ -31,7 +32,36 @@ let browser,
   scenario,
   intercepted = 0
 const escape = (s) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
-function documentFor(platform, detail) {
+function threadsCard(post, onProfile) {
+  const { id, account = 'example', offset = 0 } = post
+  const datetime = new Date(scenario.submittedAt + offset).toISOString()
+  const link = `/@${account}/post/${id}`
+  const text = escape((!onProfile && post.detailText) || post.text || caption)
+  const content = `<div lang="en"><span dir="auto">${text}</span></div>`
+  let card = `<div${(scenario.signedIn || (onProfile && post.nestedQuote)) ? ' data-pressable-container="true"' : ''}>
+    <div><a href="/@${account}"><span>${account}</span></a>
+    <a href="${link}"><time datetime="${datetime}">Just now</time></a></div>
+    ${post.quoted ? '<blockquote>' + content + '</blockquote>' : content}</div>`
+  if (onProfile && post.nestedQuote) {
+    card = `<div data-pressable-container="true"><a href="/@other">other</a>
+      <a href="/@other/post/quoting"><time datetime="${datetime}">Just now</time></a>
+      <div lang="en">A different top-level caption.</div>${card}</div>`
+  }
+  if (onProfile) card = `<div data-virtualized="${!scenario.signedIn}">${card}</div>`
+  return post.reply ? '<div role="comment">' + card + '</div>' : card
+}
+
+function documentFor(platform, pathname) {
+  if (platform === 'threads' && pathname.replace(/\/$/, '') === '/@example') {
+    const posts = scenario.submittedAt ? scenario.profilePosts || [] : []
+    return `<main><div data-pagelet="threads_profile_posts_timeline_0">${posts.map((p) => threadsCard(p, true)).join('')}</div></main>`
+  }
+  if (platform === 'threads' && scenario.profilePosts && pathname.includes('/post/')) {
+    const post = scenario.profilePosts.find((p) => pathname === `/@${p.account || 'example'}/post/${p.id}`)
+    return post
+      ? `<main><section role="region">${threadsCard(post, false)}</section></main>`
+      : '<main>Post unavailable</main>'
+  }
   const author = scenario.wrong ? 'other' : names[platform]
   const handle =
     platform === 'facebook' ? 'examplepage' : platform === 'threads' ? '@example' : 'example'
@@ -39,10 +69,12 @@ function documentFor(platform, detail) {
     platform === 'facebook'
       ? `<img alt="Posting as Page: ${escape(author)}">`
       : `<a href="/${scenario.wrong ? 'other' : handle}/">${escape(author)}</a>`
-  if (detail)
+  if (pathname === links[platform])
     return `<main><article><header><a href="/${handle}/">${escape(names[platform])}</a></header><p>${caption}</p><time datetime="${new Date().toISOString()}"></time><img src="data:image/png;base64,iVBORw0KGgo=" alt="Post photo"></article></main>`
+  const viewLink = scenario.noNoticeLink ? '' : ` <a href="${links[platform]}">View post</a>`
+  const notice = scenario.timeout ? '' : `<div role="status">Your post has been shared.${viewLink}</div>`
   return `<main><div role="dialog" aria-label="${scenario.reply ? 'Reply' : titles[platform]}"><h2>${scenario.reply ? 'Reply' : titles[platform]}</h2>${actor}<textarea aria-label="Caption"></textarea><input type="file" accept="image/*"><section id="media"></section>${scenario.crosspost ? '<label>Also share to Facebook<input type="checkbox" checked></label>' : ''}<button id="send">${platform === 'instagram' ? 'Share' : 'Post'}</button></div></main>
-  <script>window.submitCount=0;document.querySelector('input[type=file]').onchange=e=>{if(${Boolean(scenario.rejectPhoto)})return;const img=new Image();img.src=URL.createObjectURL(e.target.files[0]);img.alt='Selected photo preview';document.querySelector('#media').append(img);};document.querySelector('#send').onclick=()=>{window.submitCount++;document.querySelector('[role=dialog]').remove();${scenario.timeout ? '' : `document.body.insertAdjacentHTML('beforeend','<div role="status">Your post has been shared. <a href="${links[platform]}">View post</a></div>')`}};</script>`
+  <script>window.submitCount=0;document.querySelector('input[type=file]').onchange=e=>{if(${Boolean(scenario.rejectPhoto)})return;const img=new Image();img.src=URL.createObjectURL(e.target.files[0]);img.alt='Selected photo preview';document.querySelector('#media').append(img);};document.querySelector('#send').onclick=()=>{window.submitCount++;window.fixtureSubmitted(Date.now());document.querySelector('[role=dialog]').remove();document.body.insertAdjacentHTML('beforeend',${JSON.stringify(notice)})};</script>`
 }
 before(async () => {
   process.env.META_POST_STATE_HOME = temp
@@ -66,12 +98,15 @@ before(async () => {
   process.env.META_POST_PORT = (
     await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')
   ).split('\n')[0]
+  await browser.exposeBinding('fixtureSubmitted', (_, at) => {
+    scenario.submittedAt = at
+  })
   await browser.route('**/*', async (route) => {
     const u = new URL(route.request().url())
     const p = Object.keys(origins).find((k) => origins[k] === u.origin)
     if (!p || !scenario || route.request().resourceType() !== 'document') return route.abort()
     intercepted++
-    await route.fulfill({ contentType: 'text/html', body: documentFor(p, u.pathname === links[p]) })
+    await route.fulfill({ contentType: 'text/html', body: documentFor(p, u.pathname) })
   })
   tab = browser.pages()[0]
 })
@@ -195,5 +230,71 @@ test('a quoted success message and old unrelated article cannot close a pending 
     main.append(a)
   })
   assert.equal((await run(['publish', '--id', i.id])).state, 'pending')
+  assert.equal(await tab.evaluate(() => window.submitCount), 1)
+})
+
+for (const [name, notice] of [
+  ['missing confirmation', { timeout: true, signedIn: true }],
+  ['confirmation with no link', { noNoticeLink: true }],
+]) {
+  test(`Threads publish returns its verified permalink after a ${name}, with one submission`, async () => {
+    const key = 'native-recovery-' + ++start.n
+    scenario = {
+      ...notice,
+      profilePosts: [
+        { id: 'other', account: 'other' },
+        { id: 'older', offset: -120_000 },
+        { id: 'quoted', quoted: true },
+        { id: 'reply', reply: true },
+        { id: 'nested-quote', nestedQuote: true },
+        { id: 'different', text: 'Different text.' },
+        { id: 'new-post' },
+      ],
+    }
+    await tab.goto(origins.threads)
+    const publish = [
+      'publish', '--key', key, '--via', 'browser', '--to', 'threads=@example', '--text', caption,
+    ]
+    const expected = origins.threads + '/@example/post/new-post'
+    for (const command of [publish, ['status', '--key', key], publish]) {
+      const result = await runSocialPost(command)
+      assert.equal(result.state, 'published', JSON.stringify(result))
+      assert.equal(result.results[0].url, expected)
+    }
+    assert.equal(await tab.evaluate(() => window.submitCount), 1)
+  })
+}
+
+test('Threads status recovers after the original tab closes without posting again', async () => {
+  const intent = await start('threads', { timeout: true, profilePosts: [] })
+  const pending = await run(['publish', '--id', intent.id])
+  assert.equal(pending.state, 'pending')
+  assert.equal(await tab.evaluate(() => window.submitCount), 1)
+  await tab.close()
+  tab = await browser.newPage()
+  scenario.profilePosts.push({ id: 'late-indexed' })
+  const explicitWrong = await run([
+    'status', '--id', intent.id, '--url', origins.threads + '/@other/post/late-indexed',
+  ])
+  assert.equal(explicitWrong.state, 'pending')
+  const result = await run(['status', '--id', intent.id])
+  assert.equal(result.state, 'published')
+  assert.equal(result.url, origins.threads + '/@example/post/late-indexed')
+  assert.deepEqual(await run(['publish', '--id', intent.id]), result)
+})
+
+test('Threads profile discovery keeps ambiguous matches and unverified detail pages pending', async () => {
+  const intent = await start('threads', {
+    timeout: true,
+    signedIn: true,
+    profilePosts: [{ id: 'first' }, { id: 'second' }],
+  })
+  assert.equal((await run(['publish', '--id', intent.id])).state, 'pending')
+  scenario.profilePosts = [{ id: 'nested-quote', nestedQuote: true }]
+  assert.equal((await run(['status', '--id', intent.id])).state, 'pending')
+  scenario.profilePosts = [{ id: 'mismatch', detailText: 'Different text on the post itself.' }]
+  const result = await run(['status', '--id', intent.id])
+  assert.equal(result.state, 'pending')
+  assert.equal(result.url, undefined)
   assert.equal(await tab.evaluate(() => window.submitCount), 1)
 })
